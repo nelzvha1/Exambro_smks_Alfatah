@@ -1,0 +1,6 @@
+<resources>
+    <string name="app_name" translatable="false">CBT SMKS AL-FATAH SUKABUMI</string>
+    <string name="url_hint" translatable="false">Masukkan URL atau Alamat Ujian</string>
+    <string name="enter_button_text" translatable="false">ENTER</string>
+    <string name="logo_description" translatable="false">Logo Aplikasi Exambro</string>
+</resources>
