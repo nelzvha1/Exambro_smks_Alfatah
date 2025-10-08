@@ -1,12 +1,8 @@
 package com.example.exambrosmksalfatah
 
-import android.app.ActivityManager
-import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
 import android.view.View
 import android.view.WindowInsets
 import android.view.WindowInsetsController
@@ -23,12 +19,14 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var webView: WebView
     private val exitCode = "123456"
-    private var isAppInBackground = false
+    private var isExamStarted = false
+    private var lastPauseTime: Long = 0
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         try {
+            /* 🔒 Cegah screenshot & tampil di recent apps */
             window.setFlags(
                 WindowManager.LayoutParams.FLAG_SECURE,
                 WindowManager.LayoutParams.FLAG_SECURE
@@ -47,6 +45,7 @@ class MainActivity : AppCompatActivity() {
 
             handleIntent(intent)
 
+            // Handle tombol back
             onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
                 override fun handleOnBackPressed() {
                     if (webView.canGoBack()) {
@@ -56,6 +55,7 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
             })
+
         } catch (t: Throwable) {
             val errorWebView = WebView(this)
             setContentView(errorWebView)
@@ -73,6 +73,7 @@ class MainActivity : AppCompatActivity() {
         val url = intent?.getStringExtra("EXTRA_URL")?.trim()
         if (!url.isNullOrEmpty()) {
             webView.loadUrl(url)
+            isExamStarted = true
         } else {
             webView.loadData("<h3>❌ Error: URL tidak valid</h3>", "text/html", "UTF-8")
         }
@@ -97,40 +98,23 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // 🔍 Deteksi saat aplikasi kehilangan fokus
     override fun onPause() {
         super.onPause()
-        isAppInBackground = true
-
-        // Jika bukan karena keluar via kode akses, kembalikan ke aplikasi
-        Handler(Looper.getMainLooper()).postDelayed({
-            if (isAppInBackground && !isAppInForeground()) {
-                bringAppToFront()
-            }
-        }, 1000) // Tunda 1 detik
+        lastPauseTime = System.currentTimeMillis()
     }
 
     override fun onResume() {
         super.onResume()
-        isAppInBackground = false
-        hideSystemUI()
-    }
-
-    private fun isAppInForeground(): Boolean {
-        val am = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
-        val tasks = am.runningAppProcesses
-        for (task in tasks) {
-            if (task.processName == packageName && task.importance == ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND) {
-                return true
+        // Jika ujian sudah dimulai, periksa apakah pengguna keluar terlalu lama
+        if (isExamStarted) {
+            val timeAway = System.currentTimeMillis() - lastPauseTime
+            // Jika lebih dari 1 detik di luar → anggap pelanggaran
+            if (timeAway > 1000) {
+                handleExamViolation()
+                return
             }
         }
-        return false
-    }
-
-    private fun bringAppToFront() {
-        val intent = packageManager.getLaunchIntentForPackage(packageName)
-        intent?.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_NEW_TASK)
-        startActivity(intent)
+        hideSystemUI()
     }
 
     private fun hideSystemUI() {
@@ -152,6 +136,17 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun handleExamViolation() {
+        AlertDialog.Builder(this)
+            .setTitle("🚨 Pelanggaran Ujian!")
+            .setMessage("Anda meninggalkan aplikasi selama ujian. Sesi dianggap tidak sah dan akan diakhiri.")
+            .setPositiveButton("Mengerti") { _, _ ->
+                finishAffinity()
+            }
+            .setCancelable(false)
+            .show()
+    }
+
     private fun showExitCodeDialog() {
         val input = EditText(this).apply {
             inputType = android.text.InputType.TYPE_CLASS_NUMBER
@@ -165,7 +160,6 @@ class MainActivity : AppCompatActivity() {
             .setView(input)
             .setPositiveButton("Verifikasi") { _, _ ->
                 if (input.text.toString() == exitCode) {
-                    isAppInBackground = false // Izinkan keluar
                     finishAffinity()
                 } else {
                     AlertDialog.Builder(this)
